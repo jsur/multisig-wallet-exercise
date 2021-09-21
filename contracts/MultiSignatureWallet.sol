@@ -2,9 +2,22 @@ pragma solidity ^0.5.0;
 
 contract MultiSignatureWallet {
 
+    // events are usually defined at the top of a contract
+    // indexed makes the event easily searchable
+    event Submission(uint indexed transactionId);
+    event Confirmation(address indexed sender, uint indexed transactionId);
+
+
     address[] public owners;
     uint public required;
     mapping (address => bool) public isOwner;
+
+    uint public transactionCount;
+    mapping (uint => Transaction) public transactions;
+
+    // keep track of which owner addresses have confirmed which transactions
+    mapping (uint => mapping (address => bool)) public confirmations;
+
 
     struct Transaction {
       bool executed;
@@ -53,11 +66,28 @@ contract MultiSignatureWallet {
     /// @param value Transaction ether value.
     /// @param data Transaction data payload.
     /// @return Returns transaction ID.
-    function submitTransaction(address destination, uint value, bytes memory data) public returns (uint transactionId) {}
+    function submitTransaction(address destination, uint value, bytes memory data)
+        public
+        returns (uint transactionId)
+    {
+        require(isOwner[msg.sender]);
+        transactionId = addTransaction(destination, value, data);
+        confirmTransaction(transactionId);
+    }
 
     /// @dev Allows an owner to confirm a transaction.
     /// @param transactionId Transaction ID.
-    function confirmTransaction(uint transactionId) public {}
+    function confirmTransaction(uint transactionId)
+        public
+    {
+        require(isOwner[msg.sender]);
+        require(transactions[transactionId].destination != address(0));
+        require(confirmations[transactionId][msg.sender] == false);
+
+        confirmations[transactionId][msg.sender] = true;
+        emit Confirmation(msg.sender, transactionId);
+        executeTransaction(transactionId);
+    }
 
     /// @dev Allows an owner to revoke a confirmation for a transaction.
     /// @param transactionId Transaction ID.
@@ -80,5 +110,18 @@ contract MultiSignatureWallet {
     /// @param value Transaction ether value.
     /// @param data Transaction data payload.
     /// @return Returns transaction ID.
-    function addTransaction(address destination, uint value, bytes memory data) internal returns (uint transactionId) {}
+    function addTransaction(address destination, uint value, bytes memory data)
+        internal
+        returns (uint transactionId)
+    {
+        transactionId = transactionCount;
+        transactions[transactionId] = Transaction({
+            destination: destination,
+            value: value,
+            data: data,
+            executed: false
+        });
+        transactionCount += 1;
+        emit Submission(transactionId);
+    }
 }
